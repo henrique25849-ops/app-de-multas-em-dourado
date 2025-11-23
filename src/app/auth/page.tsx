@@ -3,13 +3,18 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { Shield, Sparkles, Trophy, Zap, CheckCircle2 } from "lucide-react";
 
 export default function AuthPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [showVerification, setShowVerification] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     // Verificar se usuário já está autenticado
@@ -31,6 +36,118 @@ export default function AuthPage() {
 
     return () => subscription.unsubscribe();
   }, [router]);
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) throw error;
+
+      setMessage({
+        type: "success",
+        text: "Código de verificação enviado para seu email! Digite o código abaixo.",
+      });
+      setShowVerification(true);
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text: error.message || "Erro ao criar conta",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: verificationCode,
+        type: "signup",
+      });
+
+      if (error) throw error;
+
+      setMessage({
+        type: "success",
+        text: "Conta verificada com sucesso! Redirecionando...",
+      });
+
+      setTimeout(() => {
+        router.push("/");
+      }, 1500);
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text: error.message || "Código inválido",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      setMessage({
+        type: "success",
+        text: "Login realizado com sucesso!",
+      });
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text: error.message || "Erro ao fazer login",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider: "google" | "facebook") => {
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text: error.message || `Erro ao conectar com ${provider}`,
+      });
+      setIsLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -134,99 +251,185 @@ export default function AuthPage() {
                   Bem-vindo!
                 </h2>
                 <p className="text-gray-400">
-                  Entre ou crie sua conta para começar
+                  {showVerification
+                    ? "Digite o código de verificação"
+                    : mode === "signin"
+                    ? "Entre na sua conta"
+                    : "Crie sua conta para começar"}
                 </p>
               </div>
 
-              <Auth
-                supabaseClient={supabase}
-                appearance={{
-                  theme: ThemeSupa,
-                  variables: {
-                    default: {
-                      colors: {
-                        brand: "#06b6d4",
-                        brandAccent: "#0891b2",
-                        brandButtonText: "white",
-                        defaultButtonBackground: "#1f2937",
-                        defaultButtonBackgroundHover: "#374151",
-                        defaultButtonBorder: "#374151",
-                        defaultButtonText: "white",
-                        dividerBackground: "#374151",
-                        inputBackground: "#111827",
-                        inputBorder: "#374151",
-                        inputBorderHover: "#06b6d4",
-                        inputBorderFocus: "#06b6d4",
-                        inputText: "white",
-                        inputLabelText: "#9ca3af",
-                        inputPlaceholder: "#6b7280",
-                        messageText: "#9ca3af",
-                        messageTextDanger: "#ef4444",
-                        anchorTextColor: "#06b6d4",
-                        anchorTextHoverColor: "#0891b2",
-                      },
-                      space: {
-                        inputPadding: "12px",
-                        buttonPadding: "12px",
-                      },
-                      borderWidths: {
-                        buttonBorderWidth: "1px",
-                        inputBorderWidth: "1px",
-                      },
-                      radii: {
-                        borderRadiusButton: "0.75rem",
-                        buttonBorderRadius: "0.75rem",
-                        inputBorderRadius: "0.75rem",
-                      },
-                    },
-                  },
-                  className: {
-                    container: "auth-container",
-                    button: "auth-button",
-                    input: "auth-input",
-                  },
-                }}
-                localization={{
-                  variables: {
-                    sign_in: {
-                      email_label: "Email",
-                      password_label: "Senha",
-                      email_input_placeholder: "seu@email.com",
-                      password_input_placeholder: "Sua senha",
-                      button_label: "Entrar",
-                      loading_button_label: "Entrando...",
-                      social_provider_text: "Entrar com {{provider}}",
-                      link_text: "Já tem uma conta? Entre",
-                    },
-                    sign_up: {
-                      email_label: "Email",
-                      password_label: "Senha",
-                      email_input_placeholder: "seu@email.com",
-                      password_input_placeholder: "Crie uma senha",
-                      button_label: "Criar conta",
-                      loading_button_label: "Criando conta...",
-                      social_provider_text: "Cadastrar com {{provider}}",
-                      link_text: "Não tem uma conta? Cadastre-se",
-                    },
-                    forgotten_password: {
-                      email_label: "Email",
-                      password_label: "Senha",
-                      email_input_placeholder: "seu@email.com",
-                      button_label: "Enviar instruções",
-                      loading_button_label: "Enviando...",
-                      link_text: "Esqueceu sua senha?",
-                    },
-                    update_password: {
-                      password_label: "Nova senha",
-                      password_input_placeholder: "Nova senha",
-                      button_label: "Atualizar senha",
-                      loading_button_label: "Atualizando...",
-                    },
-                  },
-                }}
-                providers={[]}
-                redirectTo={`${window.location.origin}/`}
-              />
+              {message && (
+                <div
+                  className={`mb-6 p-4 rounded-xl ${
+                    message.type === "success"
+                      ? "bg-green-500/10 border border-green-500/30 text-green-400"
+                      : "bg-red-500/10 border border-red-500/30 text-red-400"
+                  }`}
+                >
+                  {message.text}
+                </div>
+              )}
+
+              {showVerification ? (
+                <form onSubmit={handleVerifyCode} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">
+                      Código de Verificação
+                    </label>
+                    <input
+                      type="text"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      placeholder="Digite o código de 6 dígitos"
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 transition-colors"
+                      required
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold py-3 rounded-xl hover:from-cyan-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? "Verificando..." : "Verificar Código"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowVerification(false);
+                      setVerificationCode("");
+                      setMessage(null);
+                    }}
+                    className="w-full text-cyan-400 text-sm hover:underline"
+                  >
+                    Voltar
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <form
+                    onSubmit={mode === "signin" ? handleSignIn : handleSignUp}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label className="block text-gray-400 text-sm mb-2">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="seu@email.com"
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 transition-colors"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-gray-400 text-sm mb-2">
+                        Senha
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder={
+                          mode === "signin" ? "Sua senha" : "Crie uma senha"
+                        }
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 transition-colors"
+                        required
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold py-3 rounded-xl hover:from-cyan-600 hover:to-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoading
+                        ? mode === "signin"
+                          ? "Entrando..."
+                          : "Criando conta..."
+                        : mode === "signin"
+                        ? "Entrar"
+                        : "Criar conta"}
+                    </button>
+                  </form>
+
+                  <div className="mt-6">
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-700"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-gray-900 text-gray-400">
+                          Ou continue com
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => handleSocialLogin("google")}
+                        disabled={isLoading}
+                        className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white hover:bg-gray-750 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                          <path
+                            fill="currentColor"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="currentColor"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="currentColor"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                          />
+                          <path
+                            fill="currentColor"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                          />
+                        </svg>
+                        Google
+                      </button>
+
+                      <button
+                        onClick={() => handleSocialLogin("facebook")}
+                        disabled={isLoading}
+                        className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white hover:bg-gray-750 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
+                        Facebook
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 text-center">
+                    <button
+                      onClick={() => {
+                        setMode(mode === "signin" ? "signup" : "signin");
+                        setMessage(null);
+                      }}
+                      className="text-cyan-400 hover:underline text-sm"
+                    >
+                      {mode === "signin"
+                        ? "Não tem uma conta? Cadastre-se"
+                        : "Já tem uma conta? Entre"}
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div className="mt-6 text-center text-sm text-gray-400">
                 Ao continuar, você concorda com nossos{" "}
