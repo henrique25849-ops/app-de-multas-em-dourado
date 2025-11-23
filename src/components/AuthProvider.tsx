@@ -10,6 +10,7 @@ type AuthContextType = {
   profile: UserProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  isAdmin: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   signOut: async () => {},
+  isAdmin: false,
 });
 
 export const useAuth = () => {
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -53,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await loadUserProfile(session.user.id);
       } else {
         setProfile(null);
+        setIsAdmin(false);
         setLoading(false);
       }
     });
@@ -62,6 +66,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
+      // Tentar carregar de user_profiles primeiro (nova tabela com role)
+      const { data: userProfileData, error: userProfileError } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (userProfileData) {
+        setProfile(userProfileData);
+        setIsAdmin(userProfileData.role === "admin");
+        setLoading(false);
+        return;
+      }
+
+      // Se não encontrar em user_profiles, tentar profiles (tabela antiga)
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -77,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setProfile(data);
+        setIsAdmin(false); // profiles antigos não têm role
       }
     } catch (error) {
       console.error("Erro ao carregar perfil:", error);
@@ -88,6 +108,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createUserProfile = async (userId: string) => {
     try {
       const { data: userData } = await supabase.auth.getUser();
+      
+      // Tentar criar em user_profiles primeiro
+      const { data: newProfile, error: newProfileError } = await supabase
+        .from("user_profiles")
+        .insert([
+          {
+            id: userId,
+            email: userData.user?.email || "",
+            full_name: userData.user?.user_metadata?.full_name || userData.user?.email || "",
+            plan: "free",
+            role: "user",
+            xp: 0,
+            level: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (!newProfileError && newProfile) {
+        setProfile(newProfile);
+        setIsAdmin(false);
+        return;
+      }
+
+      // Fallback para profiles (tabela antiga)
       const { data, error } = await supabase
         .from("profiles")
         .insert([
@@ -105,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
       setProfile(data);
+      setIsAdmin(false);
     } catch (error) {
       console.error("Erro ao criar perfil:", error);
     }
@@ -114,11 +162,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    setIsAdmin(false);
     router.push("/auth");
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

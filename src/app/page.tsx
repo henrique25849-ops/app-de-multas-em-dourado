@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 
 export default function Home() {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { user, profile, loading: authLoading, signOut, isAdmin } = useAuth();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("home");
